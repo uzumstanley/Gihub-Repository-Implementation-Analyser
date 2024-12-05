@@ -182,7 +182,7 @@ if __name__ == "__main__":
     key = "split_and_embed"
     print(get_data_transformer())
     db.register_transformer(transformer=get_data_transformer(), key=key)
-    db.load(documents[0:2])
+    db.load(documents)
     db.transform(key=key)
     transformed_docs = db.transformed_items[key]
     print(len(transformed_docs))
