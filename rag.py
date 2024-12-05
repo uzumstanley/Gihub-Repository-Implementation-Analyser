@@ -17,23 +17,7 @@ from adalflow.utils import get_adalflow_default_root_path
 
 
 from adalflow.core.types import Document, ModelClientType
-from adalflow.components.model_client import OpenAIClient
 from config import configs
-
-
-def prepare_data_pipeline():
-    splitter = TextSplitter(**configs["text_splitter"])
-    embedder = adal.Embedder(
-        model_client=ModelClientType.OPENAI(),
-        model_kwargs=configs["embedder"]["model_kwargs"],
-    )
-    embedder_transformer = ToEmbeddings(
-        embedder=embedder, batch_size=configs["embedder"]["batch_size"]
-    )
-    data_transformer = adal.Sequential(
-        splitter, embedder_transformer
-    )  # sequential will chain together splitter and embedder
-    return data_transformer
 
 
 rag_prompt_task_desc = r"""
@@ -55,7 +39,7 @@ class RAG(adal.Component):
 
         if index_path is None:
             index_path = os.path.join(
-                get_adalflow_default_root_path(), "db_microsft_lomps"
+                get_adalflow_default_root_path(), "db_adalflow"  # "db_microsft_lomps"
             )
 
         self.db = LocalDB.load_state(index_path)
@@ -64,7 +48,7 @@ class RAG(adal.Component):
             "split_and_embed"
         )
         embedder = adal.Embedder(
-            model_client=ModelClientType.OPENAI(),
+            model_client=configs["embedder"]["model_client"](),
             model_kwargs=configs["embedder"]["model_kwargs"],
         )
         # map the documents to embeddings
@@ -80,8 +64,8 @@ class RAG(adal.Component):
             prompt_kwargs={
                 "task_desc_str": rag_prompt_task_desc,
             },
-            model_client=OpenAIClient(),
-            model_kwargs=configs["generator"],
+            model_client=configs["generator"]["model_client"](),
+            model_kwargs=configs["generator"]["model_kwargs"],
             output_processors=JsonParser(),
         )
 

@@ -5,36 +5,43 @@ from adalflow.core.types import ModelClientType
 from adalflow.components.data_process import TextSplitter, ToEmbeddings
 import os
 import subprocess
+from adalflow.utils import get_adalflow_default_root_path
 from config import configs
 
 
 # TODO: fix the delay in the data pipeline, chunk_size and chunk_overlap
 
 
-def get_embedder():
+# def get_data_transformer():
 
-    embedder = adal.Embedder(
-        model_client=ModelClientType.OPENAI(),
-        model_kwargs=configs["embedder"]["model_kwargs"],
-    )
-    return embedder
+#     # batch_size = 100
+
+#     # splitter_config = {"split_by": "word", "chunk_size": 500, "chunk_overlap": 100}
+
+#     splitter = TextSplitter(**configs["text_splitter"])
+#     embedder = adal.Embedder(
+#         model_client=ModelClientType.OPENAI(),
+#         model_kwargs=configs["embedder"]["model_kwargs"],
+#     )
+#     embedder_transformer = ToEmbeddings(
+#         embedder, batch_size=configs["embedder"]["batch_size"]
+#     )
+#     data_transformer = adal.Sequential(splitter, embedder_transformer)
+#     return data_transformer
 
 
-def get_data_transformer():
-
-    # batch_size = 100
-
-    # splitter_config = {"split_by": "word", "chunk_size": 500, "chunk_overlap": 100}
-
+def prepare_data_pipeline():
     splitter = TextSplitter(**configs["text_splitter"])
     embedder = adal.Embedder(
-        model_client=ModelClientType.OPENAI(),
+        model_client=configs["embedder"]["model_client"](),
         model_kwargs=configs["embedder"]["model_kwargs"],
     )
     embedder_transformer = ToEmbeddings(
-        embedder, batch_size=configs["embedder"]["batch_size"]
+        embedder=embedder, batch_size=configs["embedder"]["batch_size"]
     )
-    data_transformer = adal.Sequential(splitter, embedder_transformer)
+    data_transformer = adal.Sequential(
+        splitter, embedder_transformer
+    )  # sequential will chain together splitter and embedder
     return data_transformer
 
 
@@ -78,7 +85,7 @@ def download_github_repo(repo_url, local_path):
         return f"An unexpected error occurred: {str(e)}"
 
 
-def read_all_documents(path):
+def read_all_documents(path: str):
     """
     Recursively reads all documents in a directory and its subdirectories.
 
@@ -118,7 +125,7 @@ def transform_documents_and_save_to_db(documents: List[adal.Document], db_path: 
         db_path (str): The path to the local database file.
     """
     # Get the data transformer
-    data_transformer = get_data_transformer()
+    data_transformer = prepare_data_pipeline()
     from adalflow.core.db import LocalDB
 
     # Save the documents to a local database
@@ -129,11 +136,22 @@ def transform_documents_and_save_to_db(documents: List[adal.Document], db_path: 
     db.save_state(filepath=db_path)
 
 
-def load_db(db_path: str):
-
-    db = LocalDB(name="microsoft_lomps")
-    db.load_state(filepath=db_path)
-    return db
+def chat_with_adalflow_lib():
+    """
+    (1) Download repo: https://github.com/SylphAI-Inc/AdalFlow
+    (2) Read all documents in the repo
+    (3) Transform the documents using the data pipeline
+    (4) Save the transformed documents to a local database
+    """
+    # Download the repository
+    repo_url = "https://github.com/SylphAI-Inc/AdalFlow"
+    local_path = os.path.join(get_adalflow_default_root_path(), "AdalFlow")
+    download_github_repo(repo_url, local_path)
+    # Read all documents in the repository
+    documents = read_all_documents(local_path)
+    # Transform the documents using the data pipeline
+    db_path = os.path.join(get_adalflow_default_root_path(), "db_adalflow")
+    transform_documents_and_save_to_db(documents, db_path)
 
 
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
@@ -145,35 +163,37 @@ if __name__ == "__main__":
 
     adal.setup_env()
 
-    # get_logger()
-    repo_url = "https://github.com/microsoft/LMOps"
-    from adalflow.utils import get_adalflow_default_root_path
+    chat_with_adalflow_lib()
 
-    local_path = os.path.join(get_adalflow_default_root_path(), "LMOps")
+    # # get_logger()
+    # repo_url = "https://github.com/microsoft/LMOps"
+    # from adalflow.utils import get_adalflow_default_root_path
 
-    # download_github_repo(repo_url, local_path)
+    # local_path = os.path.join(get_adalflow_default_root_path(), "LMOps")
 
-    target_path = os.path.join(local_path, "prompt_optimization")
+    # # download_github_repo(repo_url, local_path)
 
-    documents = read_all_documents(target_path)
-    print(len(documents))
-    print(documents[0])
-    # transformed_documents = get_data_transformer()(documents[0:2])
-    # print(len(transformed_documents))
-    # print(transformed_documents[0])
+    # target_path = os.path.join(local_path, "prompt_optimization")
 
-    # save to local db
-    # from adalflow.core.db import LocalDB
+    # documents = read_all_documents(target_path)
+    # print(len(documents))
+    # print(documents[0])
+    # # transformed_documents = prepare_data_pipeline()(documents[0:2])
+    # # print(len(transformed_documents))
+    # # print(transformed_documents[0])
 
-    db = LocalDB("microsft_lomps")
-    key = "split_and_embed"
-    print(get_data_transformer())
-    db.register_transformer(transformer=get_data_transformer(), key=key)
-    db.load(documents)
-    db.transform(key=key)
-    transformed_docs = db.transformed_items[key]
-    print(len(transformed_docs))
-    print(transformed_docs[0])
-    db_path = os.path.join(get_adalflow_default_root_path(), "db_microsft_lomps")
-    db.save_state(filepath=db_path)
+    # # save to local db
+    # # from adalflow.core.db import LocalDB
+
+    # db = LocalDB("microsft_lomps")
+    # key = "split_and_embed"
+    # print(prepare_data_pipeline())
+    # db.register_transformer(transformer=prepare_data_pipeline(), key=key)
+    # db.load(documents)
+    # db.transform(key=key)
+    # transformed_docs = db.transformed_items[key]
+    # print(len(transformed_docs))
+    # print(transformed_docs[0])
+    # db_path = os.path.join(get_adalflow_default_root_path(), "db_microsft_lomps")
+    # db.save_state(filepath=db_path)
     # db = load_db(db_path)
