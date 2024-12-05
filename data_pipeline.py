@@ -140,19 +140,6 @@ from adalflow.components.retriever.faiss_retriever import FAISSRetriever
 from adalflow.core.db import LocalDB
 
 
-def get_retriever():
-
-    db_path = os.path.join(get_adalflow_default_root_path(), "db_microsft_lomps")
-    db = LocalDB.load_state(filepath=db_path)
-    print(db)
-    embedder = get_embedder()
-
-    retriever = FAISSRetriever(top_k=configs["retriever"]["top_k"], embedder=embedder)
-    embeddings = [item.vector for item in db.transformed_items["split_and_embed"]]
-    retriever.build_index_from_documents(documents=embeddings)
-    return retriever
-
-
 if __name__ == "__main__":
     from adalflow.utils import get_logger
 

@@ -8,10 +8,10 @@ configs = {
         },
     },
     "retriever": {
-        "top_k": 5,
+        "top_k": 20,
     },
     "generator": {
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4o",
         "temperature": 0.3,
         "stream": False,
     },
