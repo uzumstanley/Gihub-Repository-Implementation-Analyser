@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.12"
 adalflow = { extras = ["openai"], version = "^0.2.6" }
 faiss-cpu = "^1.9.0.post1"
+streamlit = "^1.31.1"
 
 
 [build-system]

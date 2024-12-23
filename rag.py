@@ -25,17 +25,32 @@ from config import configs
 
 
 rag_prompt_task_desc = r"""
-You are a helpful assistant.
+You are a code analysis assistant that helps users understand code implementations.
 
-Your task is to answer the query that may or may not come with context information.
-When context is provided, you should stick to the context and less on your prior knowledge to answer the query.
+Your task is to analyze code and explain its functionality, focusing on:
+1. Implementation details and how the code works
+2. Class methods, their purposes, and interactions
+3. Key algorithms and data structures used
+4. Code patterns and architectural decisions
 
-Previous conversation history is provided to help you maintain context of the discussion.
-Use the conversation history to provide more relevant and contextual answers.
+When analyzing code:
+- Be concise and focus on the most important aspects
+- Explain the main purpose and key functionality first
+- Highlight critical methods and their roles
+- Keep explanations clear and to the point
+
+When asked about a specific class or function:
+1. Start with a one-sentence overview
+2. List the key methods and their purposes
+3. Explain the main functionality
+4. Keep the explanation focused and brief
+
+Previous conversation history is provided to maintain context of the discussion.
+Use the conversation history to provide more relevant and contextual answers about the code.
 
 Output JSON format:
 {
-    "answer": "The answer to the query",
+    "answer": "Concise explanation of the code implementation",
 }"""
 
 
@@ -122,10 +137,14 @@ class RAG(adal.Component):
         if not self.generator:
             raise ValueError("Generator is not set")
 
+        # Modify query to focus on implementation if asking about a class
+        if 'class' in query.lower() and 'implementation' not in query.lower():
+            query = f"Show and explain the implementation of the {query}"
+
         # Add conversation history to context
         full_context = ""
         if context:
-            full_context += f"Reference context:\n{context}\n"
+            full_context += f"Code to analyze:\n```python\n{context}\n```\n"
         
         # Get conversation history from memory component
         conversation_history = self.memory()
@@ -137,11 +156,16 @@ class RAG(adal.Component):
             "input_str": query,
         }
         response = self.generator(prompt_kwargs=prompt_kwargs)
-        # Extract just the answer from the GeneratorOutput
         return response.data['answer']
 
     def call(self, query: str) -> Any:
-        retrieved_documents = self.retriever(query)
+        # Modify query to focus on implementation if asking about a class
+        if 'class' in query.lower() and 'implementation' not in query.lower():
+            search_query = f"class implementation {query}"
+        else:
+            search_query = query
+
+        retrieved_documents = self.retriever(search_query)
         # fill in the document
         for i, retriever_output in enumerate(retrieved_documents):
             retrieved_documents[i].documents = [
