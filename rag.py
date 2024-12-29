@@ -21,37 +21,7 @@ from adalflow.components.data_process import (
 )
 from adalflow.utils import get_adalflow_default_root_path
 from adalflow.core.component import Component
-from config import configs
-
-
-rag_prompt_task_desc = r"""
-You are a code analysis assistant that helps users understand code implementations.
-
-Your task is to analyze code and explain its functionality, focusing on:
-1. Implementation details and how the code works
-2. Class methods, their purposes, and interactions
-3. Key algorithms and data structures used
-4. Code patterns and architectural decisions
-
-When analyzing code:
-- Be concise and focus on the most important aspects
-- Explain the main purpose and key functionality first
-- Highlight critical methods and their roles
-- Keep explanations clear and to the point
-
-When asked about a specific class or function:
-1. Start with a one-sentence overview
-2. List the key methods and their purposes
-3. Explain the main functionality
-4. Keep the explanation focused and brief
-
-Previous conversation history is provided to maintain context of the discussion.
-Use the conversation history to provide more relevant and contextual answers about the code.
-
-Output JSON format:
-{
-    "answer": "Concise explanation of the code implementation",
-}"""
+from config import configs, prompts
 
 
 class Memory(Component):
@@ -92,7 +62,14 @@ class Memory(Component):
 
 
 class RAG(adal.Component):
-    def __init__(self, index_path: str = None):
+    def __init__(self, index_path: str = None, prompt_type: str = "code_analysis"):
+        """Initialize RAG component.
+        
+        Args:
+            index_path (str, optional): Path to the index database. Defaults to None.
+            prompt_type (str, optional): Type of prompt to use ('code_analysis' or 'general_qa'). 
+                                       Defaults to 'code_analysis'.
+        """
         super().__init__()
 
         # Initialize memory component
@@ -124,9 +101,12 @@ class RAG(adal.Component):
         )
         self.retriever_output_processors = RetrieverOutputToContextStr(deduplicate=True)
 
+        # Get the appropriate prompt template
+        prompt_template = prompts.get(prompt_type, prompts["code_analysis"])
+
         self.generator = adal.Generator(
             prompt_kwargs={
-                "task_desc_str": rag_prompt_task_desc,
+                "task_desc_str": prompt_template,
             },
             model_client=configs["generator"]["model_client"](),
             model_kwargs=configs["generator"]["model_kwargs"],

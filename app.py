@@ -17,8 +17,8 @@ def init_rag():
     # Initialize test database with example data
     initialize_test_database(db_path)
     
-    # Create RAG instance with test database
-    return RAG(index_path=db_path)
+    # Create RAG instance with test database using general QA prompt
+    return RAG(index_path=db_path, prompt_type="general_qa")
 
 st.title("RAG Chat Interface")
 st.caption("Test data includes information about Alice (software engineer), Bob (data scientist), and the company cafeteria.")
@@ -41,8 +41,8 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
         if "context" in message:
-            with st.expander("View relevant context"):
-                st.write(message["context"])
+            with st.expander(f"View source from {message.get('file_path', 'sample')}"):
+                st.code(message["context"], language=message.get("language", "text"))
 
 # Chat input
 if prompt := st.chat_input("What would you like to know about Alice, Bob, or the cafeteria?"):
@@ -62,14 +62,17 @@ if prompt := st.chat_input("What would you like to know about Alice, Bob, or the
             # Show relevant context
             if docs and docs[0].documents:
                 context = docs[0].documents[0].text
-                with st.expander("View relevant context"):
-                    st.write(context)
+                file_path = docs[0].documents[0].meta_data.get("title", "sample")
+                with st.expander(f"View source from {file_path}"):
+                    st.code(context, language="text")
                 
                 # Add assistant message with context to chat history
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": response,
-                    "context": context
+                    "context": context,
+                    "file_path": file_path,
+                    "language": "text"
                 })
             else:
                 # Add assistant message without context to chat history

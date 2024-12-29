@@ -3,110 +3,12 @@ import os
 import tempfile
 from rag import RAG
 from adalflow.core.types import Document
-from adalflow.components.data_process import TextSplitter, ToEmbeddings
-from adalflow.core.db import LocalDB
-import adalflow as adal
-import glob
-import re
-
-def extract_class_definition(content: str, class_name: str) -> str:
-    """Extract a complete class definition from the content."""
-    lines = content.split('\n')
-    class_start = -1
-    indent_level = 0
-    
-    # Find the class definition start
-    for i, line in enumerate(lines):
-        if f"class {class_name}" in line:
-            class_start = i
-            # Get the indentation level of the class
-            indent_level = len(line) - len(line.lstrip())
-            break
-    
-    if class_start == -1:
-        return content
-    
-    # Collect the entire class definition
-    class_lines = [lines[class_start]]
-    current_line = class_start + 1
-    
-    while current_line < len(lines):
-        line = lines[current_line]
-        # If we hit a line with same or less indentation, we're out of the class
-        if line.strip() and len(line) - len(line.lstrip()) <= indent_level:
-            break
-        class_lines.append(line)
-        current_line += 1
-    
-    return '\n'.join(class_lines)
-
-def process_repository_files(repo_path: str):
-    """Process all code files in the repository."""
-    # File extensions to look for, prioritizing code files
-    code_extensions = ['.py', '.js', '.ts', '.java', '.cpp', '.c', '.go', '.rs']
-    doc_extensions = ['.md', '.txt', '.rst', '.json', '.yaml', '.yml']
-    
-    documents = []
-    st.write(f"Scanning repository at: {repo_path}")
-    
-    # Process code files first, with special handling for implementation files
-    for ext in code_extensions:
-        files = glob.glob(f"{repo_path}/**/*{ext}", recursive=True)
-        for file_path in files:
-            # Skip virtual environment directories and UI files
-            if '.venv' in file_path or 'node_modules' in file_path:
-                continue
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    relative_path = os.path.relpath(file_path, repo_path)
-                    
-                    # Determine if this is an implementation file
-                    is_implementation = (
-                        not relative_path.startswith('test_') and
-                        not relative_path.startswith('app_') and
-                        'test' not in relative_path.lower()
-                    )
-                    
-                    st.write(f"Processing: {relative_path}")
-                    doc = Document(
-                        text=content,
-                        meta_data={
-                            "file_path": relative_path,
-                            "type": ext[1:],
-                            "is_code": True,
-                            "is_implementation": is_implementation
-                        }
-                    )
-                    documents.append(doc)
-            except Exception as e:
-                st.error(f"Error reading {file_path}: {str(e)}")
-    
-    # Then process documentation files
-    for ext in doc_extensions:
-        files = glob.glob(f"{repo_path}/**/*{ext}", recursive=True)
-        for file_path in files:
-            if '.venv' in file_path or 'node_modules' in file_path:
-                continue
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    relative_path = os.path.relpath(file_path, repo_path)
-                    st.write(f"Processing: {relative_path}")
-                    doc = Document(
-                        text=content,
-                        meta_data={
-                            "file_path": relative_path,
-                            "type": ext[1:],
-                            "is_code": False,
-                            "is_implementation": False
-                        }
-                    )
-                    documents.append(doc)
-            except Exception as e:
-                st.error(f"Error reading {file_path}: {str(e)}")
-    
-    return documents
+from data_pipeline import (
+    extract_class_definition,
+    extract_class_name_from_query,
+    read_all_documents,
+    transform_documents_and_save_to_db
+)
 
 # Initialize RAG system with repository data
 @st.cache_resource
@@ -121,73 +23,17 @@ def init_rag(_repo_path: str):
     
     # Process repository files
     with st.spinner("Processing repository files..."):
-        documents = process_repository_files(_repo_path)
-    
-    if not documents:
-        st.error("No documents found in the repository!")
-        return None
+        documents = read_all_documents(_repo_path)
+        if not documents:
+            st.error("No documents found in the repository!")
+            return None
     
     # Initialize database with repository documents
     with st.spinner("Creating embeddings..."):
-        data_transformer = adal.Sequential(
-            TextSplitter(split_by="word", chunk_size=400, chunk_overlap=200),
-            ToEmbeddings(
-                embedder=adal.Embedder(
-                    model_client=adal.OpenAIClient(),
-                    model_kwargs={
-                        "model": "text-embedding-3-small",
-                        "dimensions": 256,
-                        "encoding_format": "float",
-                    }
-                ),
-                batch_size=100
-            )
-        )
-        
-        db = LocalDB("repo_db")
-        db.register_transformer(transformer=data_transformer, key="split_and_embed")
-        db.load(documents)
-        db.transform(key="split_and_embed")
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        db.save_state(filepath=db_path)
+        transform_documents_and_save_to_db(documents, db_path)
     
     # Create RAG instance with repository database
     return RAG(index_path=db_path)
-
-def extract_class_name_from_query(query: str) -> str:
-    """Extract class name from a query about a class."""
-    # Common patterns for asking about classes
-    patterns = [
-        r'class (\w+)',
-        r'the (\w+) class',
-        r'what does (\w+) do',
-        r'how does (\w+) work',
-        r'show me (\w+)',
-        r'explain (\w+)',
-    ]
-    
-    query = query.lower()
-    words = query.split()
-    
-    # First try to find class name using patterns
-    for pattern in patterns:
-        matches = re.findall(pattern, query, re.IGNORECASE)
-        if matches:
-            # Return the first match, capitalized
-            return matches[0].capitalize()
-    
-    # If no pattern match, look for words that might be class names (capitalized words)
-    for word in words:
-        # Skip common words
-        if word in ['the', 'class', 'show', 'me', 'how', 'does', 'what', 'is', 'are', 'explain']:
-            continue
-        # Return any word that starts with a capital letter in the original query
-        original_words = prompt.split()
-        for original_word in original_words:
-            if original_word.lower() == word and original_word[0].isupper():
-                return original_word
-    
-    return None
 
 st.title("Repository Code Assistant")
 st.caption("Analyze and ask questions about your code repository")
@@ -239,6 +85,9 @@ if st.session_state.rag and (prompt := st.chat_input(
     with st.chat_message("user"):
         st.write(prompt)
     
+    # Check if user is asking about a specific class
+    class_name = extract_class_name_from_query(prompt)
+    
     # Get RAG response
     with st.chat_message("assistant"):
         with st.spinner("Analyzing code..."):
@@ -257,6 +106,12 @@ if st.session_state.rag and (prompt := st.chat_input(
                 context = doc.text
                 file_path = doc.meta_data.get("file_path", "unknown")
                 file_type = doc.meta_data.get("type", "python")
+                
+                # If asking about a specific class, try to extract just that class definition
+                if class_name and file_type == "python":
+                    class_context = extract_class_definition(context, class_name)
+                    if class_context != context:  # Only use if we found the class
+                        context = class_context
                 
                 with st.expander(f"View source from {file_path}"):
                     st.code(context, language=file_type)
