@@ -1,11 +1,17 @@
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 import os
+from uuid import uuid4
 
 import adalflow as adal
 from adalflow.core.db import LocalDB
-
-from adalflow.core.types import ModelClientType
-
+from adalflow.core.types import (
+    ModelClientType,
+    Document,
+    Conversation,
+    DialogTurn,
+    UserQuery,
+    AssistantResponse,
+)
 from adalflow.core.string_parser import JsonParser
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
 from adalflow.components.data_process import (
@@ -14,39 +20,74 @@ from adalflow.components.data_process import (
     TextSplitter,
 )
 from adalflow.utils import get_adalflow_default_root_path
+from adalflow.core.component import Component
+from config import configs, prompts
 
 
-from adalflow.core.types import Document, ModelClientType
-from config import configs
+class Memory(Component):
+    def __init__(self, turn_db: LocalDB = None):
+        """Initialize the Memory component."""
+        super().__init__()
+        self.current_conversation = Conversation()
+        self.turn_db = turn_db or LocalDB()  # all turns
+        self.conver_db = LocalDB()  # a list of conversations
 
+    def call(self) -> str:
+        """Returns the current conversation history as a formatted string."""
+        if not self.current_conversation.dialog_turns:
+            return ""
 
-rag_prompt_task_desc = r"""
-You are a helpful assistant.
+        formatted_history = []
+        for turn in self.current_conversation.dialog_turns.values():
+            formatted_history.extend(
+                [
+                    f"User: {turn.user_query.query_str}",
+                    f"Assistant: {turn.assistant_response.response_str}",
+                ]
+            )
+        return "\n".join(formatted_history)
 
-Your task is to answer the query that may or may not come with context information.
-When context is provided, you should stick to the context and less on your prior knowledge to answer the query.
+    def add_dialog_turn(self, user_query: str, assistant_response: str):
+        """Add a new dialog turn to the current conversation."""
+        dialog_turn = DialogTurn(
+            id=str(uuid4()),
+            user_query=UserQuery(query_str=user_query),
+            assistant_response=AssistantResponse(response_str=assistant_response),
+        )
 
-Output JSON format:
-{
-    "answer": "The answer to the query",
-}"""
+        self.current_conversation.append_dialog_turn(dialog_turn)
+        self.turn_db.add(
+            {"user_query": user_query, "assistant_response": assistant_response}
+        )
 
 
 class RAG(adal.Component):
-
-    def __init__(self, index_path: str = None):
+    def __init__(self, index_path: str = None, prompt_type: str = "code_analysis"):
+        """Initialize RAG component.
+        
+        Args:
+            index_path (str, optional): Path to the index database. Defaults to None.
+            prompt_type (str, optional): Type of prompt to use ('code_analysis' or 'general_qa'). 
+                                       Defaults to 'code_analysis'.
+        """
         super().__init__()
+
+        # Initialize memory component
+        self.memory = Memory()
 
         if index_path is None:
             index_path = os.path.join(
-                get_adalflow_default_root_path(), "db_adalflow"  # "db_microsft_lomps"
+                get_adalflow_default_root_path(), "db_adalflow"
             )
 
-        self.db = LocalDB.load_state(index_path)
+        try:
+            self.db = LocalDB.load_state(index_path)
+            self.transformed_docs = self.db.get_transformed_data("split_and_embed")
+        except (FileNotFoundError, KeyError):
+            print(f"No existing database found at {index_path}. Initializing new database.")
+            self.db = LocalDB("new_db")
+            self.transformed_docs = []
 
-        self.transformed_docs: List[adal.Document] = self.db.get_transformed_data(
-            "split_and_embed"
-        )
         embedder = adal.Embedder(
             model_client=configs["embedder"]["model_client"](),
             model_kwargs=configs["embedder"]["model_kwargs"],
@@ -60,9 +101,12 @@ class RAG(adal.Component):
         )
         self.retriever_output_processors = RetrieverOutputToContextStr(deduplicate=True)
 
+        # Get the appropriate prompt template
+        prompt_template = prompts.get(prompt_type, prompts["code_analysis"])
+
         self.generator = adal.Generator(
             prompt_kwargs={
-                "task_desc_str": rag_prompt_task_desc,
+                "task_desc_str": prompt_template,
             },
             model_client=configs["generator"]["model_client"](),
             model_kwargs=configs["generator"]["model_kwargs"],
@@ -73,15 +117,35 @@ class RAG(adal.Component):
         if not self.generator:
             raise ValueError("Generator is not set")
 
+        # Modify query to focus on implementation if asking about a class
+        if 'class' in query.lower() and 'implementation' not in query.lower():
+            query = f"Show and explain the implementation of the {query}"
+
+        # Add conversation history to context
+        full_context = ""
+        if context:
+            full_context += f"Code to analyze:\n```python\n{context}\n```\n"
+        
+        # Get conversation history from memory component
+        conversation_history = self.memory()
+        if conversation_history:
+            full_context += f"\nPrevious conversation:\n{conversation_history}"
+
         prompt_kwargs = {
-            "context_str": context,
+            "context_str": full_context,
             "input_str": query,
         }
         response = self.generator(prompt_kwargs=prompt_kwargs)
-        return response
+        return response.data['answer']
 
     def call(self, query: str) -> Any:
-        retrieved_documents = self.retriever(query)
+        # Modify query to focus on implementation if asking about a class
+        if 'class' in query.lower() and 'implementation' not in query.lower():
+            search_query = f"class implementation {query}"
+        else:
+            search_query = query
+
+        retrieved_documents = self.retriever(search_query)
         # fill in the document
         for i, retriever_output in enumerate(retrieved_documents):
             retrieved_documents[i].documents = [
@@ -89,12 +153,16 @@ class RAG(adal.Component):
                 for doc_index in retriever_output.doc_indices
             ]
 
-        print(f"retrieved_documents: \n {retrieved_documents}\n")
         context_str = self.retriever_output_processors(retrieved_documents)
+        response = self.generate(query, context=context_str)
+        
+        # Update conversation history in memory
+        self.memory.add_dialog_turn(
+            user_query=query,
+            assistant_response=response
+        )
 
-        print(f"context_str: \n {context_str}\n")
-
-        return self.generate(query, context=context_str), retrieved_documents
+        return response, retrieved_documents
 
 
 if __name__ == "__main__":
@@ -102,11 +170,6 @@ if __name__ == "__main__":
 
     adal.setup_env()
     rag = RAG()
-    # query = """what is Automatic Prompt Optimization with "Gradient Descent" and Beam Search"""
-    # response, retrieved_documents = rag(query)
-    # print(f"response: \n {response}\n")
-    # print(f"retrieved_documents: \n {retrieved_documents}\n")
-    # print("RAG component finished")
     print("RAG component initialized. Type your query below or type 'exit' to quit.")
 
     while True:
