@@ -1,6 +1,53 @@
 # RAG Code Assistant
 
-A Retrieval-Augmented Generation (RAG) system for analyzing and understanding code repositories. The system provides both a command-line interface and a web UI for interacting with your codebase.
+A Retrieval-Augmented Generation (RAG) system for analyzing and understanding code repositories. The system provides both a command-line interface and a web UI for interacting with your codebase. In this repo there are two versions of the RAG system:
+
+1. `app.py` - a demo version that uses test data
+2. `app_repo.py` - a version that uses a real codebase
+
+It is still a work in progress and lots of things can be improved.
+
+# Repository Architecture
+
+This document explains how the different components of the RAG (Retrieval-Augmented Generation) system work together.
+
+## File Structure and Dependencies
+
+```mermaid
+graph TD
+    config[config.py] --> rag[rag.py]
+    config --> data_pipeline[data_pipeline.py]
+    data_pipeline --> test_rag[test_rag.py]
+    data_pipeline --> app_repo[app_repo.py]
+    rag --> app[app.py]
+    rag --> app_repo
+    test_rag --> app
+```
+
+## Data Flow
+
+```mermaid
+flowchart TD
+    subgraph Input
+        A[User Query] --> B[Streamlit Interface]
+        C[Repository/Documents] --> D[Document Processor]
+    end
+
+    subgraph Processing
+        B --> E[RAG System]
+        D --> F[Text Splitter]
+        F --> G[Embedder]
+        G --> H[FAISS Index]
+        H --> E
+    end
+
+    subgraph Output
+        E --> I[Response]
+        E --> J[Context]
+        I --> K[Chat Interface]
+        J --> K
+    end
+```
 
 ## Features
 
@@ -77,3 +124,10 @@ poetry run python rag.py
 - "Show me the implementation of the Memory class"
 - "How is data processing handled?"
 - "Explain the initialization process"
+
+## TODO
+
+- [ ] Add evaluation metrics
+- [ ] Improve the embedding model
+- [ ] Improve the text splitter and chunking
+- [ ] Improve the retriever
