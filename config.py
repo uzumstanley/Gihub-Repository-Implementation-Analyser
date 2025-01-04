@@ -78,7 +78,7 @@ configs = {
     },
     "text_splitter": {
         "split_by": "word",
-        "chunk_size": 10,
-        "chunk_overlap": 1,
+        "chunk_size": 100,
+        "chunk_overlap": 20,
     },
 }
