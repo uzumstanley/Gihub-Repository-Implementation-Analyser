@@ -17,14 +17,10 @@ def initialize_test_database(db_path: str):
 
 
 def main():
-    # Set your OpenAI API key
-    os.environ["OPENAI_API_KEY"] = "Your OpenAI API key"
 
-    # Create a temporary directory for the database
     temp_dir = tempfile.mkdtemp()
     db_path = os.path.join(temp_dir, "test_db")
 
-    # Initialize test database
     initialize_test_database(db_path)
 
     # Create RAG instance
@@ -67,4 +63,7 @@ def main():
 
 
 if __name__ == "__main__":
+    from adalflow.utils import setup_env
+
+    setup_env()
     main()
