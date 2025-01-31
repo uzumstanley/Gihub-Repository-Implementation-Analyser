@@ -41,3 +41,7 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+__pycache__
+
+# ignore adalflow cache
+adalflow/
