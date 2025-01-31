@@ -22,6 +22,7 @@ from adalflow.components.data_process import (
 from adalflow.utils import get_adalflow_default_root_path
 from adalflow.core.component import Component
 from config import configs, prompts
+from src.data_pipeline import DatabaseManager
 
 
 class Memory(Component):
@@ -62,43 +63,29 @@ class Memory(Component):
 
 
 class RAG(adal.Component):
-    def __init__(self, index_path: str = None, prompt_type: str = "code_analysis"):
+    __doc__ = """RAG with one repo.
+    If you want to load a new repo. You need to call prepare_retriever(repo_url_or_path) first."""
+
+    def __init__(self, prompt_type: str = "code_analysis"):
         """Initialize RAG component.
-        
+
         Args:
             index_path (str, optional): Path to the index database. Defaults to None.
-            prompt_type (str, optional): Type of prompt to use ('code_analysis' or 'general_qa'). 
+            prompt_type (str, optional): Type of prompt to use ('code_analysis' or 'general_qa').
                                        Defaults to 'code_analysis'.
         """
         super().__init__()
 
-        # Initialize memory component
+        # Initialize embedder, generator, and db_manager
         self.memory = Memory()
 
-        if index_path is None:
-            index_path = os.path.join(
-                get_adalflow_default_root_path(), "db_adalflow"
-            )
-
-        try:
-            self.db = LocalDB.load_state(index_path)
-            self.transformed_docs = self.db.get_transformed_data("split_and_embed")
-        except (FileNotFoundError, KeyError):
-            print(f"No existing database found at {index_path}. Initializing new database.")
-            self.db = LocalDB("new_db")
-            self.transformed_docs = []
-
-        embedder = adal.Embedder(
+        self.embedder = adal.Embedder(
             model_client=configs["embedder"]["model_client"](),
             model_kwargs=configs["embedder"]["model_kwargs"],
         )
-        # map the documents to embeddings
-        self.retriever = FAISSRetriever(
-            **configs["retriever"],
-            embedder=embedder,
-            documents=self.transformed_docs,
-            document_map_func=lambda doc: doc.vector,
-        )
+
+        self.initialize_db_manager()
+
         self.retriever_output_processors = RetrieverOutputToContextStr(deduplicate=True)
 
         # Get the appropriate prompt template
@@ -113,19 +100,35 @@ class RAG(adal.Component):
             output_processors=JsonParser(),
         )
 
+    def initialize_db_manager(self):
+        self.db_manager = DatabaseManager()
+        self.transformed_docs = []
+
+    def prepare_retriever(self, repo_url_or_path: str):
+        r"""Run prepare_retriever once for each repo."""
+        self.initialize_db_manager()
+        self.transformed_docs = self.db_manager.prepare_database(repo_url_or_path)
+        print(f"len(self.transformed_docs): {len(self.transformed_docs)}")
+        self.retriever = FAISSRetriever(
+            **configs["retriever"],
+            embedder=self.embedder,
+            documents=self.transformed_docs,
+            document_map_func=lambda doc: doc.vector,
+        )
+
     def generate(self, query: str, context: Optional[str] = None) -> Any:
         if not self.generator:
             raise ValueError("Generator is not set")
 
         # Modify query to focus on implementation if asking about a class
-        if 'class' in query.lower() and 'implementation' not in query.lower():
+        if "class" in query.lower() and "implementation" not in query.lower():
             query = f"Show and explain the implementation of the {query}"
 
         # Add conversation history to context
         full_context = ""
         if context:
             full_context += f"Code to analyze:\n```python\n{context}\n```\n"
-        
+
         # Get conversation history from memory component
         conversation_history = self.memory()
         if conversation_history:
@@ -136,11 +139,11 @@ class RAG(adal.Component):
             "input_str": query,
         }
         response = self.generator(prompt_kwargs=prompt_kwargs)
-        return response.data['answer']
+        return response.data["answer"]
 
     def call(self, query: str) -> Any:
         # Modify query to focus on implementation if asking about a class
-        if 'class' in query.lower() and 'implementation' not in query.lower():
+        if "class" in query.lower() and "implementation" not in query.lower():
             search_query = f"class implementation {query}"
         else:
             search_query = query
@@ -155,12 +158,9 @@ class RAG(adal.Component):
 
         context_str = self.retriever_output_processors(retrieved_documents)
         response = self.generate(query, context=context_str)
-        
+
         # Update conversation history in memory
-        self.memory.add_dialog_turn(
-            user_query=query,
-            assistant_response=response
-        )
+        self.memory.add_dialog_turn(user_query=query, assistant_response=response)
 
         return response, retrieved_documents
 
@@ -169,11 +169,17 @@ if __name__ == "__main__":
     from adalflow.utils import get_logger
 
     adal.setup_env()
+    # repo_url = "https://github.com/SylphAI-Inc/AdalFlow"
+    repo_url = "https://github.com/SylphAI-Inc/GithubChat"
     rag = RAG()
-    print("RAG component initialized. Type your query below or type 'exit' to quit.")
+    rag.prepare_retriever(repo_url)
+    print(
+        f"RAG component initialized for repo: {repo_url}. Type your query below or type 'exit' to quit."
+    )
 
     while True:
         # Get user input
+
         query = input("Enter your query (or type 'exit' to stop): ")
 
         # Exit condition

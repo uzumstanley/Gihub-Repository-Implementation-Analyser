@@ -1,61 +1,7 @@
-# RAG Code Assistant
+# GithubChat
 
-A Retrieval-Augmented Generation (RAG) system for analyzing and understanding code repositories. The system provides both a command-line interface and a web UI for interacting with your codebase. In this repo there are two versions of the RAG system:
-
-1. `app.py` - a demo version that uses test data
-2. `app_repo.py` - a version that uses a real codebase
-
-It is still a work in progress and lots of things can be improved.
-
-# Repository Architecture
-
-This document explains how the different components of the RAG (Retrieval-Augmented Generation) system work together.
-
-## File Structure and Dependencies
-
-```mermaid
-graph TD
-    config[config.py] --> rag[rag.py]
-    config --> data_pipeline[data_pipeline.py]
-    data_pipeline --> test_rag[test_rag.py]
-    data_pipeline --> app_repo[app_repo.py]
-    rag --> app[app.py]
-    rag --> app_repo
-    test_rag --> app
-```
-
-## Data Flow
-
-```mermaid
-flowchart TD
-    subgraph Input
-        A[User Query] --> B[Streamlit Interface]
-        C[Repository/Documents] --> D[Document Processor]
-    end
-
-    subgraph Processing
-        B --> E[RAG System]
-        D --> F[Text Splitter]
-        F --> G[Embedder]
-        G --> H[FAISS Index]
-        H --> E
-    end
-
-    subgraph Output
-        E --> I[Response]
-        E --> J[Context]
-        I --> K[Chat Interface]
-        J --> K
-    end
-```
-
-## Features
-
-- Code-aware responses using RAG
-- Memory for maintaining conversation context
-- Support for multiple programming languages
-- Interactive web interface
-- Command-line interface
+A RAG assistant to allow you to chat with any github repo. 
+Learn fast. The default repo is AdalFlow github repo.
 
 ## Setup
 
@@ -79,19 +25,31 @@ OPENAI_API_KEY = "your-openai-api-key-here"
 
 ## Running the Application
 
-### Web Interface
-
-1. Run the demo version (with test data):
+Run the streamlit app:
 ```bash
 poetry run streamlit run app.py
 ```
 
-2. Run the repository analysis version:
-```bash
-poetry run streamlit run app_repo.py
-```
+## ROADMAP
+- [x] Clearyly structured RAG that can prepare a repo, persit from reloading, and answer questions.
+  - `DatabaseManager` in `src/data_pipeline.py` to manage the database.
+  - `RAG` class in `src/rag.py` to manage the whole RAG lifecycle.
 
-### Command Line Interface
+<!-- CREATE Checklist -->
+- [ ] Create an evaluation dataset  
+- [ ] Evaluate the RAG performance on the dataset  
+- [ ] Auto-optimize the RAG model
+<!-- ## Learn
+
+## Local Storage
+We use adalflow's root directory, which is at ~/.adalflow.
+- repos/repo_name/...
+- repos/repo_name_db/...
+
+- data_pipeline.py: From the main and local code test, you will know the process of download repo and chunk files, and embed the chunks.
+- rag.py: The main code of the RAG model. -->
+
+<!-- ### Command Line Interface
 
 Run the RAG system directly:
 ```bash
@@ -130,4 +88,4 @@ poetry run python rag.py
 - [ ] Add evaluation metrics
 - [ ] Improve the embedding model
 - [ ] Improve the text splitter and chunking
-- [ ] Improve the retriever
+- [ ] Improve the retriever -->

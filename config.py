@@ -30,7 +30,6 @@ Output JSON format:
 {
     "answer": "Concise explanation of the code implementation",
 }""",
-
     "general_qa": r"""
 You are a helpful assistant answering questions about provided documents.
 
@@ -52,7 +51,7 @@ Use the conversation history to provide more relevant and contextual answers.
 Output JSON format:
 {
     "answer": "Clear and concise response based on the context",
-}"""
+}""",
 }
 
 configs = {
@@ -82,3 +81,5 @@ configs = {
         "chunk_overlap": 20,
     },
 }
+
+DEFAULT_GITHUB_REPO = "https://github.com/SylphAI-Inc/AdalFlow"
