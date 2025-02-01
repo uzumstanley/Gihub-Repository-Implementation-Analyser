@@ -5,6 +5,7 @@ from src.data_pipeline import (
     extract_class_definition,
     extract_class_name_from_query,
 )
+from typing import List
 
 from config import DEFAULT_GITHUB_REPO
 
@@ -51,9 +52,22 @@ if st.button("Clear Chat"):
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
-        if "context" in message:
-            with st.expander(f"View source from {message.get('file_path', 'unknown')}"):
-                st.code(message["context"], language=message.get("language", "python"))
+        # if "context" in message:
+        #     with st.expander(f"View source from {message.get('file_path', 'unknown')}"):
+        #         st.code(message["context"], language=message.get("language", "python"))
+
+from adalflow.core.types import Document
+
+
+def form_context(context: List[Document]):
+    formatted_context = ""
+    for doc in context:
+        formatted_context += ""
+        f"file_path: {doc.meta_data.get('file_path', 'unknown')} \n"
+        f"language: {doc.meta_data.get('type', 'python')} \n"
+        f"content: {doc.text} \n"
+    return formatted_context
+
 
 if st.session_state.rag and (
     prompt := st.chat_input(
@@ -65,7 +79,8 @@ if st.session_state.rag and (
     with st.chat_message("user"):
         st.write(prompt)
 
-    class_name = extract_class_name_from_query(prompt)
+    # class_name = extract_class_name_from_query(prompt)
+    query = prompt
 
     with st.chat_message("assistant"):
         with st.spinner("Analyzing code..."):
@@ -73,34 +88,13 @@ if st.session_state.rag and (
 
             # Show relevant context first, then the explanation
             if docs and docs[0].documents:
-                # Try to find implementation code first
-                implementation_docs = [
-                    doc
-                    for doc in docs[0].documents
-                    if doc.meta_data.get("is_implementation", False)
-                ]
-
-                # Use implementation if found, otherwise use first document
-                doc = (
-                    implementation_docs[0]
-                    if implementation_docs
-                    else docs[0].documents[0]
-                )
-                context = doc.text
-                file_path = doc.meta_data.get("file_path", "unknown")
-                file_type = doc.meta_data.get("type", "python")
-
-                # If asking about a specific class, try to extract just that class definition
-                if class_name and file_type == "python":
-                    class_context = extract_class_definition(context, class_name)
-                    if class_context != context:  # Only use if we found the class
-                        context = class_context
-
-                with st.expander(f"View source from {file_path}"):
-                    st.code(context, language=file_type)
+                context = docs[0].documents
 
                 # Now show the explanation
-                st.write(response)
+                st.write(f"Rationale: {response.rationale}")
+                st.write(f"Answer: {response.answer}")
+
+                st.write(f"context: {form_context(context)}")
 
                 # Add to chat history
                 st.session_state.messages.append(
@@ -108,8 +102,6 @@ if st.session_state.rag and (
                         "role": "assistant",
                         "content": response,
                         "context": context,
-                        "file_path": file_path,
-                        "language": file_type,
                     }
                 )
             else:

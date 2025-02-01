@@ -290,6 +290,7 @@ class DatabaseManager:
 
     def _create_repo(self, repo_url_or_path: str) -> None:
         """
+        Download and prepare all paths.
         Paths:
         ~/.adalflow/repos/{repo_name} (for url, local path will be the same)
         ~/.adalflow/databases/{repo_name}.pkl
@@ -333,19 +334,18 @@ class DatabaseManager:
         if self.repo_paths and os.path.exists(self.repo_paths["save_db_file"]):
             printc("Loading existing database...")
             self.db = LocalDB.load_state(self.repo_paths["save_db_file"])
-            documents = self.db.get_transformed_data("split_and_embed")
+            documents = self.db.get_transformed_data(key="split_and_embed")
             if documents:
                 return documents
 
         # prepare the database
-        download_github_repo(self.repo_url_or_path, self.repo_paths["save_repo_dir"])
         printc("Creating new database...")
         documents = read_all_documents(self.repo_paths["save_repo_dir"])
         self.db = transform_documents_and_save_to_db(
             documents, self.repo_paths["save_db_file"]
         )
         printc(f"total documents: {len(documents)}")
-        transformed_docs = self.db.get_transformed_data("split_and_embed")
+        transformed_docs = self.db.get_transformed_data(key="split_and_embed")
         printc(f"total transformed documents: {len(transformed_docs)}")
         return transformed_docs
 
