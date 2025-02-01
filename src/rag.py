@@ -51,16 +51,25 @@ RAG_TEMPLATE = r"""<START_OF_SYS_PROMPT>
 {{system_prompt}}
 {{output_format_str}}
 <END_OF_SYS_PROMPT>
+{# OrderedDict of DialogTurn #}
+{% if conversation_history %}
 <START_OF_CONVERSATION_HISTORY>
-{% for dialog_turn in conversation_history %}
-{{loop.index }}. 
+{% for key, dialog_turn in conversation_history.items() %}
+{{key}}.
 User: {{dialog_turn.user_query.query_str}}
 You: {{dialog_turn.assistant_response.response_str}}
 {% endfor %}
 <END_OF_CONVERSATION_HISTORY>
+{% endif %}
+{% if contexts %}
 <START_OF_CONTEXT>
-{{context_str}}
+{% for context in contexts %}
+{{loop.index }}.
+File Path: {{context.meta_data.get('file_path', 'unknown')}}
+Content: {{context.text}}
+{% endfor %}
 <END_OF_CONTEXT>
+{% endif %}
 <START_OF_USER_PROMPT>
 {{input_str}}
 <END_OF_USER_PROMPT>
@@ -95,8 +104,6 @@ class RAG(adal.Component):
 
         self.initialize_db_manager()
 
-        self.retriever_output_processors = RetrieverOutputToContextStr(deduplicate=True)
-
         # Get the appropriate prompt template
         data_parser = adal.DataClassParser(data_class=RAGAnswer, return_data_class=True)
 
@@ -106,7 +113,7 @@ class RAG(adal.Component):
                 "output_format_str": data_parser.get_output_format_str(),
                 "conversation_history": self.memory(),
                 "system_prompt": system_prompt,
-                "context_str": None,
+                "contexts": None,
             },
             model_client=configs["generator"]["model_client"](),
             model_kwargs=configs["generator"]["model_kwargs"],
@@ -132,17 +139,19 @@ class RAG(adal.Component):
     def call(self, query: str) -> Any:
 
         retrieved_documents = self.retriever(query)
-        # fill in the document
-        for i, retriever_output in enumerate(retrieved_documents):
-            retrieved_documents[i].documents = [
-                self.transformed_docs[doc_index]
-                for doc_index in retriever_output.doc_indices
-            ]
 
-        context_str = self.retriever_output_processors(retrieved_documents)
+        # fill in the document
+        retrieved_documents[0].documents = [
+            self.transformed_docs[doc_index]
+            for doc_index in retrieved_documents[0].doc_indices
+        ]
+
+        printc(f"retrieved_documents: {retrieved_documents[0].documents}")
+        printc(f"memory: {self.memory()}")
+
         prompt_kwargs = {
             "input_str": query,
-            "context_str": context_str,
+            "contexts": retrieved_documents[0].documents,
             "conversation_history": self.memory(),
         }
         response = self.generator(
@@ -156,7 +165,7 @@ class RAG(adal.Component):
 
         self.memory.add_dialog_turn(user_query=query, assistant_response=final_response)
 
-        return final_response, retrieved_documents
+        return final_response, retrieved_documents, prompt_str
 
 
 if __name__ == "__main__":
@@ -184,6 +193,7 @@ if __name__ == "__main__":
         # Process the query
         try:
             response, retrieved_documents = rag(query)
+            rag.memory.add_dialog_turn(user_query=query, assistant_response=response)
             print(f"\nResponse:\n{response}\n")
             print(f"Retrieved Documents:\n{retrieved_documents}\n")
         except Exception as e:

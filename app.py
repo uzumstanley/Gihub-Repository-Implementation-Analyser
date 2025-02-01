@@ -1,10 +1,7 @@
 import streamlit as st
 import os
 from src.rag import RAG
-from src.data_pipeline import (
-    extract_class_definition,
-    extract_class_name_from_query,
-)
+
 from typing import List
 
 from config import DEFAULT_GITHUB_REPO
@@ -44,17 +41,33 @@ if st.button("Initialize local RAG"):
     except Exception as e:
         st.toast(f"Load failed for repository at: {repo_path}")
 
+# TODO: Better reset the conversation
 if st.button("Clear Chat"):
     st.session_state.messages = []
     if st.session_state.rag:
         st.session_state.rag.memory.current_conversation.dialog_turns.clear()
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
-        # if "context" in message:
-        #     with st.expander(f"View source from {message.get('file_path', 'unknown')}"):
-        #         st.code(message["context"], language=message.get("language", "python"))
+
+def display_messages():
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.write("Assistant:")
+            if "rationale" in message:
+                st.write(message["rationale"])
+            st.write(message["content"])
+            if "context" in message:
+                with st.expander("View context"):
+                    for doc in message["context"]:
+                        st.write(
+                            f"file_path: {doc.meta_data.get('file_path', 'unknown')}"
+                        )
+                        st.write(f"language: {doc.meta_data.get('type', 'unknown')}")
+                        language = doc.meta_data.get("type", "python")
+                        if language == "py":
+                            st.code(doc.text, language="python")
+                        else:
+                            st.write(doc.text)
+
 
 from adalflow.core.types import Document
 
@@ -70,37 +83,40 @@ def form_context(context: List[Document]):
 
 
 if st.session_state.rag and (
-    prompt := st.chat_input(
+    query := st.chat_input(
         "Ask about the code (e.g., 'Show me the implementation of the RAG class', 'How is memory handled?')"
     )
 ):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role": "user", "content": query})
 
     with st.chat_message("user"):
-        st.write(prompt)
-
-    # class_name = extract_class_name_from_query(prompt)
-    query = prompt
+        st.write(query)
 
     with st.chat_message("assistant"):
         with st.spinner("Analyzing code..."):
-            response, docs = st.session_state.rag(prompt)
+
+            st.write(f"memory: {st.session_state.rag.memory()}")
+            response, docs, _ = st.session_state.rag(query)
 
             # Show relevant context first, then the explanation
             if docs and docs[0].documents:
                 context = docs[0].documents
 
-                # Now show the explanation
-                st.write(f"Rationale: {response.rationale}")
-                st.write(f"Answer: {response.answer}")
-
-                st.write(f"context: {form_context(context)}")
-
                 # Add to chat history
+                st.write(f"add to history")
                 st.session_state.messages.append(
                     {
                         "role": "assistant",
-                        "content": response,
+                        "rationale": (
+                            response.rationale
+                            if hasattr(response, "rationale")
+                            else None
+                        ),
+                        "content": (
+                            response.answer
+                            if hasattr(response, "answer")
+                            else response.raw_response
+                        ),
                         "context": context,
                     }
                 )
@@ -111,3 +127,6 @@ if st.session_state.rag and (
                 )
 elif not st.session_state.rag:
     st.info("Please load a repository first!")
+
+# Finally, call display_messages *after* everything is appended
+display_messages()
