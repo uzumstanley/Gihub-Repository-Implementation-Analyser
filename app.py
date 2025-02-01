@@ -96,7 +96,7 @@ if st.session_state.rag and (
         with st.spinner("Analyzing code..."):
 
             st.write(f"memory: {st.session_state.rag.memory()}")
-            response, docs, _ = st.session_state.rag(query)
+            response, docs = st.session_state.rag(query)
 
             # Show relevant context first, then the explanation
             if docs and docs[0].documents:

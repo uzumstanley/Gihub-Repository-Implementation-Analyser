@@ -158,6 +158,7 @@ class RAG(adal.Component):
             prompt_kwargs=prompt_kwargs,
         )
 
+        # for debug
         prompt_str = self.generator.get_prompt(**prompt_kwargs)
         printc(f"prompt_str: {prompt_str}")
 
@@ -165,7 +166,7 @@ class RAG(adal.Component):
 
         self.memory.add_dialog_turn(user_query=query, assistant_response=final_response)
 
-        return final_response, retrieved_documents, prompt_str
+        return final_response, retrieved_documents
 
 
 if __name__ == "__main__":
