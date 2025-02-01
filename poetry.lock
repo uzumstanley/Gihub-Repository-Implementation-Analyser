@@ -2,13 +2,13 @@
 
 [[package]]
 name = "adalflow"
-version = "1.0.1b1"
+version = "1.0.1"
 description = "The Library to Build and Auto-optimize LLM Applications"
 optional = false
 python-versions = "<4.0,>=3.9"
 files = [
-    {file = "adalflow-1.0.1b1-py3-none-any.whl", hash = "sha256:eea5c405078c88736e965ce01eb15a5f3dbcd139cbb8fee8ea6f230bbca4aab3"},
-    {file = "adalflow-1.0.1b1.tar.gz", hash = "sha256:833349d78b10f9a64bac4f582ea9d185c14b3570695b6d14b3e22cfcd1972f1d"},
+    {file = "adalflow-1.0.1-py3-none-any.whl", hash = "sha256:99534abcc7ce4e04b345ec06fef463848365ff2005002f5aac9c31dde6694bf3"},
+    {file = "adalflow-1.0.1.tar.gz", hash = "sha256:28b718d1163be8a3988b8c0d3ec5653e690dfbb404e1e2c1523a505f58d46558"},
 ]
 
 [package.dependencies]
@@ -1887,4 +1887,4 @@ watchmedo = ["PyYAML (>=3.10)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "ad95d7a405f925a2ab7239b79c9d5b5c9e91a80d39561bfdd9bfab688f955777"
+content-hash = "754f1d5a248aa73fbec204c238686f5671a8b04830cb5deee830e8ae9249d0ad"

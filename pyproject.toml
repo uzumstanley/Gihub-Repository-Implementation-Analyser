@@ -7,9 +7,8 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-adalflow = { version = "1.0.1b1", allow-prereleases = true, extras = [
-    "openai",
-] }
+
+adalflow = { version = ">=1.0.0", extras = ["openai"] }
 
 faiss-cpu = "^1.9.0.post1"
 streamlit = "^1.31.1"
