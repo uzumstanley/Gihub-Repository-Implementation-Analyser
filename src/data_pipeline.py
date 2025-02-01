@@ -11,85 +11,6 @@ from config import configs
 from adalflow.core.db import LocalDB
 
 
-def extract_class_definition(content: str, class_name: str) -> str:
-    """Extract a complete class definition from the content."""
-    lines = content.split("\n")
-    class_start = -1
-    indent_level = 0
-
-    # Find the class definition start
-    for i, line in enumerate(lines):
-        if f"class {class_name}" in line:
-            class_start = i
-            # Get the indentation level of the class
-            indent_level = len(line) - len(line.lstrip())
-            break
-
-    if class_start == -1:
-        return content
-
-    # Collect the entire class definition
-    class_lines = [lines[class_start]]
-    current_line = class_start + 1
-
-    while current_line < len(lines):
-        line = lines[current_line]
-        # If we hit a line with same or less indentation, we're out of the class
-        if line.strip() and len(line) - len(line.lstrip()) <= indent_level:
-            break
-        class_lines.append(line)
-        current_line += 1
-
-    return "\n".join(class_lines)
-
-
-def extract_class_name_from_query(query: str) -> str:
-    """Extract class name from a query about a class."""
-    # Common patterns for asking about classes
-    patterns = [
-        r"class (\w+)",
-        r"the (\w+) class",
-        r"what does (\w+) do",
-        r"how does (\w+) work",
-        r"show me (\w+)",
-        r"explain (\w+)",
-    ]
-
-    query = query.lower()
-    words = query.split()
-
-    # First try to find class name using patterns
-    for pattern in patterns:
-        matches = re.findall(pattern, query, re.IGNORECASE)
-        if matches:
-            # Return the first match, capitalized
-            return matches[0].capitalize()
-
-    # If no pattern match, look for words that might be class names (capitalized words)
-    for word in words:
-        # Skip common words
-        if word in [
-            "the",
-            "class",
-            "show",
-            "me",
-            "how",
-            "does",
-            "what",
-            "is",
-            "are",
-            "explain",
-        ]:
-            continue
-        # Return any word that starts with a capital letter in the original query
-        original_words = query.split()
-        for original_word in original_words:
-            if original_word.lower() == word and original_word[0].isupper():
-                return original_word
-
-    return None
-
-
 def download_github_repo(repo_url: str, local_path: str):
     """
     Downloads a GitHub repository to a specified local path.
@@ -290,6 +211,7 @@ class DatabaseManager:
 
     def _create_repo(self, repo_url_or_path: str) -> None:
         """
+        Download and prepare all paths.
         Paths:
         ~/.adalflow/repos/{repo_name} (for url, local path will be the same)
         ~/.adalflow/databases/{repo_name}.pkl
@@ -333,19 +255,18 @@ class DatabaseManager:
         if self.repo_paths and os.path.exists(self.repo_paths["save_db_file"]):
             printc("Loading existing database...")
             self.db = LocalDB.load_state(self.repo_paths["save_db_file"])
-            documents = self.db.get_transformed_data("split_and_embed")
+            documents = self.db.get_transformed_data(key="split_and_embed")
             if documents:
                 return documents
 
         # prepare the database
-        download_github_repo(self.repo_url_or_path, self.repo_paths["save_repo_dir"])
         printc("Creating new database...")
         documents = read_all_documents(self.repo_paths["save_repo_dir"])
         self.db = transform_documents_and_save_to_db(
             documents, self.repo_paths["save_db_file"]
         )
         printc(f"total documents: {len(documents)}")
-        transformed_docs = self.db.get_transformed_data("split_and_embed")
+        transformed_docs = self.db.get_transformed_data(key="split_and_embed")
         printc(f"total transformed documents: {len(transformed_docs)}")
         return transformed_docs
 

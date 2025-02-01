@@ -1,55 +1,37 @@
-from typing import Optional, Any, List, Dict
-import os
+from typing import Any, List
 from uuid import uuid4
 
 import adalflow as adal
-from adalflow.core.db import LocalDB
 from adalflow.core.types import (
-    ModelClientType,
-    Document,
     Conversation,
     DialogTurn,
     UserQuery,
     AssistantResponse,
 )
-from adalflow.core.string_parser import JsonParser
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
 from adalflow.components.data_process import (
     RetrieverOutputToContextStr,
-    ToEmbeddings,
-    TextSplitter,
 )
-from adalflow.utils import get_adalflow_default_root_path
-from adalflow.core.component import Component
-from config import configs, prompts
+from adalflow.core.component import DataComponent
+from config import configs
 from src.data_pipeline import DatabaseManager
+from adalflow.utils import printc
 
 
-class Memory(Component):
-    def __init__(self, turn_db: LocalDB = None):
-        """Initialize the Memory component."""
+class Memory(DataComponent):
+    """Simple conversation management with a list of dialog turns."""
+
+    def __init__(self):
         super().__init__()
         self.current_conversation = Conversation()
-        self.turn_db = turn_db or LocalDB()  # all turns
-        self.conver_db = LocalDB()  # a list of conversations
 
-    def call(self) -> str:
-        """Returns the current conversation history as a formatted string."""
-        if not self.current_conversation.dialog_turns:
-            return ""
+    def call(self) -> List[DialogTurn]:
 
-        formatted_history = []
-        for turn in self.current_conversation.dialog_turns.values():
-            formatted_history.extend(
-                [
-                    f"User: {turn.user_query.query_str}",
-                    f"Assistant: {turn.assistant_response.response_str}",
-                ]
-            )
-        return "\n".join(formatted_history)
+        all_dialog_turns = self.current_conversation.dialog_turns
+
+        return all_dialog_turns
 
     def add_dialog_turn(self, user_query: str, assistant_response: str):
-        """Add a new dialog turn to the current conversation."""
         dialog_turn = DialogTurn(
             id=str(uuid4()),
             user_query=UserQuery(query_str=user_query),
@@ -57,23 +39,59 @@ class Memory(Component):
         )
 
         self.current_conversation.append_dialog_turn(dialog_turn)
-        self.turn_db.add(
-            {"user_query": user_query, "assistant_response": assistant_response}
-        )
+
+
+system_prompt = r"""
+You are a code assistant which answer's user question on a Github Repo. 
+You will receive user query, relevant context, and past conversation history.
+Think step by step."""
+
+# history is a list of dialog turns
+RAG_TEMPLATE = r"""<START_OF_SYS_PROMPT>
+{{system_prompt}}
+{{output_format_str}}
+<END_OF_SYS_PROMPT>
+{# OrderedDict of DialogTurn #}
+{% if conversation_history %}
+<START_OF_CONVERSATION_HISTORY>
+{% for key, dialog_turn in conversation_history.items() %}
+{{key}}.
+User: {{dialog_turn.user_query.query_str}}
+You: {{dialog_turn.assistant_response.response_str}}
+{% endfor %}
+<END_OF_CONVERSATION_HISTORY>
+{% endif %}
+{% if contexts %}
+<START_OF_CONTEXT>
+{% for context in contexts %}
+{{loop.index }}.
+File Path: {{context.meta_data.get('file_path', 'unknown')}}
+Content: {{context.text}}
+{% endfor %}
+<END_OF_CONTEXT>
+{% endif %}
+<START_OF_USER_PROMPT>
+{{input_str}}
+<END_OF_USER_PROMPT>
+"""
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class RAGAnswer(adal.DataClass):
+    rationale: str = field(default="", metadata={"desc": "Rationale for the answer."})
+    answer: str = field(default="", metadata={"desc": "Answer to the user query."})
+
+    __output_fields__ = ["rationale", "answer"]
 
 
 class RAG(adal.Component):
     __doc__ = """RAG with one repo.
     If you want to load a new repo. You need to call prepare_retriever(repo_url_or_path) first."""
 
-    def __init__(self, prompt_type: str = "code_analysis"):
-        """Initialize RAG component.
+    def __init__(self):
 
-        Args:
-            index_path (str, optional): Path to the index database. Defaults to None.
-            prompt_type (str, optional): Type of prompt to use ('code_analysis' or 'general_qa').
-                                       Defaults to 'code_analysis'.
-        """
         super().__init__()
 
         # Initialize embedder, generator, and db_manager
@@ -86,18 +104,20 @@ class RAG(adal.Component):
 
         self.initialize_db_manager()
 
-        self.retriever_output_processors = RetrieverOutputToContextStr(deduplicate=True)
-
         # Get the appropriate prompt template
-        prompt_template = prompts.get(prompt_type, prompts["code_analysis"])
+        data_parser = adal.DataClassParser(data_class=RAGAnswer, return_data_class=True)
 
         self.generator = adal.Generator(
+            template=RAG_TEMPLATE,
             prompt_kwargs={
-                "task_desc_str": prompt_template,
+                "output_format_str": data_parser.get_output_format_str(),
+                "conversation_history": self.memory(),
+                "system_prompt": system_prompt,
+                "contexts": None,
             },
             model_client=configs["generator"]["model_client"](),
             model_kwargs=configs["generator"]["model_kwargs"],
-            output_processors=JsonParser(),
+            output_processors=data_parser,
         )
 
     def initialize_db_manager(self):
@@ -116,53 +136,36 @@ class RAG(adal.Component):
             document_map_func=lambda doc: doc.vector,
         )
 
-    def generate(self, query: str, context: Optional[str] = None) -> Any:
-        if not self.generator:
-            raise ValueError("Generator is not set")
+    def call(self, query: str) -> Any:
 
-        # Modify query to focus on implementation if asking about a class
-        if "class" in query.lower() and "implementation" not in query.lower():
-            query = f"Show and explain the implementation of the {query}"
+        retrieved_documents = self.retriever(query)
 
-        # Add conversation history to context
-        full_context = ""
-        if context:
-            full_context += f"Code to analyze:\n```python\n{context}\n```\n"
+        # fill in the document
+        retrieved_documents[0].documents = [
+            self.transformed_docs[doc_index]
+            for doc_index in retrieved_documents[0].doc_indices
+        ]
 
-        # Get conversation history from memory component
-        conversation_history = self.memory()
-        if conversation_history:
-            full_context += f"\nPrevious conversation:\n{conversation_history}"
+        printc(f"retrieved_documents: {retrieved_documents[0].documents}")
+        printc(f"memory: {self.memory()}")
 
         prompt_kwargs = {
-            "context_str": full_context,
             "input_str": query,
+            "contexts": retrieved_documents[0].documents,
+            "conversation_history": self.memory(),
         }
-        response = self.generator(prompt_kwargs=prompt_kwargs)
-        return response.data["answer"]
+        response = self.generator(
+            prompt_kwargs=prompt_kwargs,
+        )
 
-    def call(self, query: str) -> Any:
-        # Modify query to focus on implementation if asking about a class
-        if "class" in query.lower() and "implementation" not in query.lower():
-            search_query = f"class implementation {query}"
-        else:
-            search_query = query
+        prompt_str = self.generator.get_prompt(**prompt_kwargs)
+        printc(f"prompt_str: {prompt_str}")
 
-        retrieved_documents = self.retriever(search_query)
-        # fill in the document
-        for i, retriever_output in enumerate(retrieved_documents):
-            retrieved_documents[i].documents = [
-                self.transformed_docs[doc_index]
-                for doc_index in retriever_output.doc_indices
-            ]
+        final_response = response.data
 
-        context_str = self.retriever_output_processors(retrieved_documents)
-        response = self.generate(query, context=context_str)
+        self.memory.add_dialog_turn(user_query=query, assistant_response=final_response)
 
-        # Update conversation history in memory
-        self.memory.add_dialog_turn(user_query=query, assistant_response=response)
-
-        return response, retrieved_documents
+        return final_response, retrieved_documents, prompt_str
 
 
 if __name__ == "__main__":
@@ -190,6 +193,7 @@ if __name__ == "__main__":
         # Process the query
         try:
             response, retrieved_documents = rag(query)
+            rag.memory.add_dialog_turn(user_query=query, assistant_response=response)
             print(f"\nResponse:\n{response}\n")
             print(f"Retrieved Documents:\n{retrieved_documents}\n")
         except Exception as e:
