@@ -3,6 +3,11 @@
 A RAG assistant to allow you to chat with any github repo. 
 Learn fast. The default repo is AdalFlow github repo.
 
+[![Watch the video](https://img.youtube.com/vi/PvZTSmTK8b0/maxresdefault.jpg)](https://youtu.be/PvZTSmTK8b0)
+*Click the image above to watch the demo video*
+
+
+
 ## Project Structure
 ```
 .
@@ -59,9 +64,9 @@ cd frontend
 pnpm install
 ```
 
+
 3. Start the development server:
 ```bash
-pnpm run dev
 ```
 The frontend will be available at http://localhost:3000
 
@@ -89,7 +94,13 @@ Analyzes a GitHub repository based on a query.
   - `DatabaseManager` in `src/data_pipeline.py` to manage the database.
   - `RAG` class in `src/rag.py` to manage the whole RAG lifecycle.
 
+### On the RAG backend
 - [ ] Conditional retrieval. Sometimes users just want to clarify a past conversation, no extra context needed.
 - [ ] Create an evaluation dataset  
 - [ ] Evaluate the RAG performance on the dataset  
 - [ ] Auto-optimize the RAG model
+
+### On the React frontend
+
+- [ ] Support the display of the whole conversation history instead of just the last message.
+- [ ] Support the management of multiple conversations.
