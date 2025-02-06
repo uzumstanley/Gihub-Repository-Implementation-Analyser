@@ -3,6 +3,11 @@
 A RAG assistant to allow you to chat with any github repo. 
 Learn fast. The default repo is AdalFlow github repo.
 
+[![Watch the video](https://img.youtube.com/vi/PvZTSmTK8b0/maxresdefault.jpg)](https://youtu.be/PvZTSmTK8b0)
+*Click the image above to watch the demo video*
+
+
+
 ## Project Structure
 ```
 .
