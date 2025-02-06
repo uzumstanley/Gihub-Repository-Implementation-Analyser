@@ -3,7 +3,17 @@
 A RAG assistant to allow you to chat with any github repo. 
 Learn fast. The default repo is AdalFlow github repo.
 
-## Setup
+## Project Structure
+```
+.
+├── frontend/            # React frontend application
+├── src/                # Python backend code
+├── api.py              # FastAPI server
+├── app.py              # Streamlit application
+└── pyproject.toml      # Python dependencies
+```
+
+## Backend Setup
 
 1. Install dependencies:
 ```bash
@@ -23,11 +33,55 @@ Add your OpenAI API key to `.streamlit/secrets.toml`:
 OPENAI_API_KEY = "your-openai-api-key-here"
 ```
 
-## Running the Application
+## Running the Applications
 
+### Streamlit UI
 Run the streamlit app:
 ```bash
 poetry run streamlit run app.py
+```
+
+### FastAPI Backend
+Run the API server:
+```bash
+poetry run uvicorn api:app --reload
+```
+The API will be available at http://localhost:8000
+
+### React Frontend
+1. Navigate to the frontend directory:
+```bash
+cd frontend
+```
+
+2. Install Node.js dependencies:
+```bash
+pnpm install
+```
+
+3. Start the development server:
+```bash
+pnpm run dev
+```
+The frontend will be available at http://localhost:3000
+
+## API Endpoints
+
+### POST /query
+Analyzes a GitHub repository based on a query.
+```json
+// Request
+{
+  "repo_url": "https://github.com/username/repo",
+  "query": "What does this repository do?"
+}
+
+// Response
+{
+  "rationale": "Analysis rationale...",
+  "answer": "Detailed answer...",
+  "contexts": [...]
+}
 ```
 
 ## ROADMAP
