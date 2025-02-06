@@ -67,6 +67,7 @@ pnpm install
 
 3. Start the development server:
 ```bash
+pnpm run dev
 ```
 The frontend will be available at http://localhost:3000
 
