@@ -2,7 +2,7 @@
 
 # Streamlit secrets
 .streamlit/secrets.toml
-
+node_modules/
 # Python
 __pycache__/
 *.py[cod]
