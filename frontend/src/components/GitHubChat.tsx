@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
-import { Loader2, ChevronDown, ChevronRight, Github } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import React, { useState, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import { Loader2, ChevronDown, ChevronRight, Github } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 interface DocumentMetadata {
   file_path: string;
@@ -23,21 +23,23 @@ interface QueryResponse {
 }
 
 const GitHubChat: React.FC = () => {
-  const [repoUrl, setRepoUrl] = useState('');
-  const [query, setQuery] = useState('');
+  const [repoUrl, setRepoUrl] = useState("");
+  const [query, setQuery] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [response, setResponse] = useState<QueryResponse | null>(null);
-  const [expandedContexts, setExpandedContexts] = useState<{[key: number]: boolean}>({});
+  const [expandedContexts, setExpandedContexts] = useState<{
+    [key: number]: boolean;
+  }>({});
 
   const analyzeRepo = useCallback(async () => {
     if (!repoUrl.trim() || !query.trim()) return;
 
     setIsProcessing(true);
     try {
-      const response = await fetch('http://localhost:8000/query', {
-        method: 'POST',
+      const response = await fetch("http://localhost:8000/query", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           repo_url: repoUrl,
@@ -46,15 +48,16 @@ const GitHubChat: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to analyze repository');
+        throw new Error("Failed to analyze repository");
       }
 
       const result = await response.json();
       setResponse(result);
-      toast.success('Analysis complete!');
+      toast.success("Analysis complete!");
     } catch (error) {
-      console.error('Error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to analyze repository';
+      console.error("Error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to analyze repository";
       toast.error(errorMessage);
     } finally {
       setIsProcessing(false);
@@ -62,9 +65,9 @@ const GitHubChat: React.FC = () => {
   }, [repoUrl, query]);
 
   const toggleContext = (index: number) => {
-    setExpandedContexts(prev => ({
+    setExpandedContexts((prev) => ({
       ...prev,
-      [index]: !prev[index]
+      [index]: !prev[index],
     }));
   };
 
@@ -74,15 +77,18 @@ const GitHubChat: React.FC = () => {
         <div className="text-center space-y-2">
           <div className="flex items-center justify-center gap-2">
             <Github className="h-8 w-8" />
-            <h1 className="text-3xl font-bold tracking-tight">GitHub Repository Analysis</h1>
+            <h1 className="text-3xl font-bold tracking-tight">GitHubChat</h1>
           </div>
-          <p className="text-gray-600">Analyze any GitHub repository using AI</p>
+          <p className="text-gray-600">Chat with any Github Repo!</p>
         </div>
 
         <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl p-6 space-y-6">
           <div className="space-y-4">
             <div>
-              <label htmlFor="repo-url" className="block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="repo-url"
+                className="block text-sm font-medium text-gray-700"
+              >
                 GitHub Repository URL
               </label>
               <div className="mt-1">
@@ -98,7 +104,10 @@ const GitHubChat: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="query" className="block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="query"
+                className="block text-sm font-medium text-gray-700"
+              >
                 Query
               </label>
               <div className="mt-1">
@@ -183,7 +192,7 @@ const GitHubChat: React.FC = () => {
               <button
                 onClick={() => {
                   setResponse(null);
-                  setQuery('');
+                  setQuery("");
                 }}
                 className="w-full flex items-center justify-center rounded-md bg-gray-50 px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-100"
               >
@@ -197,4 +206,4 @@ const GitHubChat: React.FC = () => {
   );
 };
 
-export default GitHubChat; 
+export default GitHubChat;
